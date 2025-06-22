@@ -18,11 +18,13 @@ from open_webui.config import ENABLE_ADMIN_CHAT_ACCESS, ENABLE_ADMIN_EXPORT
 from open_webui.constants import ERROR_MESSAGES
 from open_webui.env import SRC_LOG_LEVELS
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from open_webui.utils.access_control import has_permission
+
+from ..utils.cad_utils.cad_preview import execute_and_preview
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["MODELS"])
@@ -858,3 +860,27 @@ async def delete_all_tags_by_id(id: str, user=Depends(get_verified_user)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND
         )
+
+class CQMeshData(BaseModel):
+    vertices: list[float]
+    faces: list[float]
+    objectCount: int
+
+
+class CADPreviewReq(BaseModel):
+    content: str
+
+
+class CADPreviewResp(BaseModel):
+    ok: bool = Field(default=False)
+    data: dict = Field(default=dict())
+    error: str = Field(default="")
+
+
+@router.post("/api/cad/preview", response_model=CADPreviewResp)
+async def preview_cad_model(req: CADPreviewReq):
+    data, error = execute_and_preview(req.content)
+    if error:
+        return CADPreviewResp(ok=False, error=error)
+    assert data
+    return CADPreviewResp(ok=True, data=data)

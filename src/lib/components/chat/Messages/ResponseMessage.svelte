@@ -51,6 +51,8 @@
 	import FollowUps from './ResponseMessage/FollowUps.svelte';
 	import { fade } from 'svelte/transition';
 	import { flyAndScale } from '$lib/utils/transitions';
+	import * as THREE from "three";
+	import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 	interface MessageType {
 		id: string;
@@ -585,6 +587,104 @@
 			});
 		}
 	});
+
+	let displayCAD = false;
+	async function handleDisplayCAD(show: boolean) {
+		const node = document.getElementById("cadContainer")as HTMLElement;
+		if (!show) {
+			node.innerHTML = "";
+			return;
+		}
+
+		let response = await fetch("${WEBUI_BASE_URL}/api/cad/preview", {
+			method: "POST",
+			mode: "no-cors",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({contnet: message.content}),
+		});
+		let data = await response.json();
+		if (data.ok) {
+			renderThreeJs(data.data);
+		} else {
+			node.innerHTML = data.error;
+		}
+	}
+
+	function renderThreeJs(data: any) {
+		const node = document.getElementById("cadContainer") as HTMLElement;
+		const w = node.clientWidth;
+		const h = w / 16 * 9;
+
+		const scene = new THREE.Scene();
+		scene.background = new THREE.Color(0xf0f0f0);
+
+		const camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
+		camera.position.z = 5;
+
+		const renderer = new THREE.WebGLRenderer({ antialias: true });
+		renderer.setSize(w, h);
+		
+		const controls = new OrbitControls(camera, renderer.domElement);
+		scene.add(new THREE.AxesHelper(10));
+		
+		// const geometry = new THREE.BoxGeometry(1, 1, 1);
+		// const material = new THREE.MeshBasicMaterial({ color: 0x779977 });
+		// const cube = new THREE.Mesh(geometry, material);
+		// scene.add(cube);
+		
+		// display result
+		// copy from https://github.dev/30hours/cadquery2web/blob/main/web/main.js
+		// create geometry from the mesh data
+		const geometry = new THREE.BufferGeometry();
+		geometry.setAttribute('position', new THREE.Float32BufferAttribute(data.vertices, 3));
+		geometry.setIndex(data.faces);
+		geometry.computeVertexNormals();
+
+		// create material with CSS properties
+		const material = new THREE.MeshStandardMaterial({ color: 0xffeae3, metalness: 0.1, roughness: 0.5 });
+
+		// create and position the model
+		const currentModel = new THREE.Mesh(geometry, material);
+
+		// center the model (XY only, note Y is Z)
+		geometry.computeBoundingBox();
+		const center = new THREE.Vector3();
+		currentModel.geometry.boundingBox?.getCenter(center);
+		currentModel.geometry.translate(-center.x, 0, -center.z);
+		scene.add(currentModel);
+
+		// set camera to frame the object
+		const bbox = new THREE.Box3().setFromObject(currentModel);
+		const size = bbox.getSize(new THREE.Vector3());
+		const maxDim = Math.max(size.x, size.y, size.z);
+		const fov = camera.fov * (Math.PI / 180);
+		const cameraDistance = Math.abs(maxDim / Math.tan(fov / 2)) * 0.5;
+
+		// position camera at an isometric-like view
+		camera.position.set(cameraDistance, cameraDistance, cameraDistance);
+		camera.lookAt(0, 0, 0);
+		// display result end
+
+		node.appendChild(renderer.domElement);
+
+		function animate() {
+			requestAnimationFrame(animate);
+			controls.update();
+			renderer.render(scene, camera);
+		}
+		animate();
+
+		window.addEventListener("resize", () => {
+			const node = document.getElementById("cadContainer") as HTMLElement;
+			const w = node.clientWidth;
+			const h = w / 16 * 9;
+			camera.aspect = w / h;
+			camera.updateProjectionMatrix();
+			renderer.setSize(w, h);
+		})
+	}
 </script>
 
 <DeleteConfirmDialog
@@ -1377,6 +1477,14 @@
 										</button>
 									</Tooltip>
 
+									{#if isLastMessage}
+										<button type="button" on:click={() => {
+											displayCAD = !displayCAD;
+											handleDisplayCAD(displayCAD);
+										}}
+										> {displayCAD?"隐藏CAD模型":"显示CAD模型"}</button>
+									{/if}
+
 									{#if siblings.length > 1}
 										<Tooltip content={$i18n.t('Delete')} placement="bottom">
 											<button
@@ -1456,6 +1564,8 @@
 							}}
 						/>
 					{/if}
+
+					<div id="cadContainer"></div>
 
 					{#if isLastMessage && message.done && !readOnly && (message?.followUps ?? []).length > 0}
 						<div class="mt-2.5" in:fade={{ duration: 100 }}>
