@@ -51,7 +51,7 @@
 	import FollowUps from './ResponseMessage/FollowUps.svelte';
 	import { fade } from 'svelte/transition';
 	import { flyAndScale } from '$lib/utils/transitions';
-	import * as THREE from "three";
+	import * as THREE from 'three';
 	import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 	interface MessageType {
@@ -137,6 +137,8 @@
 
 	export let isLastMessage = true;
 	export let readOnly = false;
+
+	let cadContainerNode: HTMLDivElement;
 
 	let buttonsContainerElement: HTMLDivElement;
 	let showDeleteConfirm = false;
@@ -590,32 +592,30 @@
 
 	let displayCAD = false;
 	async function handleDisplayCAD(show: boolean) {
-		const node = document.getElementById("cadContainer")as HTMLElement;
 		if (!show) {
-			node.innerHTML = "";
+			cadContainerNode.innerHTML = '';
 			return;
 		}
 
-		let response = await fetch("${WEBUI_BASE_URL}/api/cad/preview", {
-			method: "POST",
-			mode: "no-cors",
+		let response = await fetch(`${WEBUI_BASE_URL}/api/v1/chats/cad/preview`, {
+			method: 'POST',
+			mode: 'no-cors',
 			headers: {
-				"Content-Type": "application/json",
+				'Content-Type': 'application/json'
 			},
-			body: JSON.stringify({contnet: message.content}),
+			body: JSON.stringify({ content: message.content })
 		});
 		let data = await response.json();
 		if (data.ok) {
 			renderThreeJs(data.data);
 		} else {
-			node.innerHTML = data.error;
+			cadContainerNode.innerHTML = data.error;
 		}
 	}
 
 	function renderThreeJs(data: any) {
-		const node = document.getElementById("cadContainer") as HTMLElement;
-		const w = node.clientWidth;
-		const h = w / 16 * 9;
+		const w = cadContainerNode.clientWidth;
+		const h = (w / 16) * 9;
 
 		const scene = new THREE.Scene();
 		scene.background = new THREE.Color(0xf0f0f0);
@@ -625,15 +625,14 @@
 
 		const renderer = new THREE.WebGLRenderer({ antialias: true });
 		renderer.setSize(w, h);
-		
+
 		const controls = new OrbitControls(camera, renderer.domElement);
-		scene.add(new THREE.AxesHelper(10));
-		
+
 		// const geometry = new THREE.BoxGeometry(1, 1, 1);
 		// const material = new THREE.MeshBasicMaterial({ color: 0x779977 });
 		// const cube = new THREE.Mesh(geometry, material);
 		// scene.add(cube);
-		
+
 		// display result
 		// copy from https://github.dev/30hours/cadquery2web/blob/main/web/main.js
 		// create geometry from the mesh data
@@ -643,7 +642,9 @@
 		geometry.computeVertexNormals();
 
 		// create material with CSS properties
-		const material = new THREE.MeshStandardMaterial({ color: 0xffeae3, metalness: 0.1, roughness: 0.5 });
+		const material = new THREE.MeshStandardMaterial({
+			color: 0xffd93d
+		});
 
 		// create and position the model
 		const currentModel = new THREE.Mesh(geometry, material);
@@ -665,9 +666,19 @@
 		// position camera at an isometric-like view
 		camera.position.set(cameraDistance, cameraDistance, cameraDistance);
 		camera.lookAt(0, 0, 0);
+
+		const ambientLight = new THREE.AmbientLight(0xffffff, 2.5);
+		scene.add(ambientLight);
+		const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+		directionalLight.castShadow = true;
+		directionalLight.position.set(-cameraDistance, cameraDistance, cameraDistance);
+		directionalLight.target.position.set(0, 0, 0);
+		scene.add(directionalLight);
+
+		scene.add(new THREE.AxesHelper(cameraDistance));
 		// display result end
 
-		node.appendChild(renderer.domElement);
+		cadContainerNode.appendChild(renderer.domElement);
 
 		function animate() {
 			requestAnimationFrame(animate);
@@ -676,14 +687,13 @@
 		}
 		animate();
 
-		window.addEventListener("resize", () => {
-			const node = document.getElementById("cadContainer") as HTMLElement;
-			const w = node.clientWidth;
-			const h = w / 16 * 9;
+		window.addEventListener('resize', () => {
+			const w = cadContainerNode.clientWidth;
+			const h = (w / 16) * 9;
 			camera.aspect = w / h;
 			camera.updateProjectionMatrix();
 			renderer.setSize(w, h);
-		})
+		});
 	}
 </script>
 
@@ -1477,13 +1487,14 @@
 										</button>
 									</Tooltip>
 
-									{#if isLastMessage}
-										<button type="button" on:click={() => {
+									<button
+										type="button"
+										class={isLastMessage ? 'visible' : 'invisible group-hover:visible'}
+										on:click={() => {
 											displayCAD = !displayCAD;
 											handleDisplayCAD(displayCAD);
-										}}
-										> {displayCAD?"隐藏CAD模型":"显示CAD模型"}</button>
-									{/if}
+										}}>{displayCAD ? '隐藏CAD模型' : '显示CAD模型'}</button
+									>
 
 									{#if siblings.length > 1}
 										<Tooltip content={$i18n.t('Delete')} placement="bottom">
@@ -1565,7 +1576,7 @@
 						/>
 					{/if}
 
-					<div id="cadContainer"></div>
+					<div bind:this={cadContainerNode}></div>
 
 					{#if isLastMessage && message.done && !readOnly && (message?.followUps ?? []).length > 0}
 						<div class="mt-2.5" in:fade={{ duration: 100 }}>

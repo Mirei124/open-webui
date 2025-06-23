@@ -877,7 +877,7 @@ class CADPreviewResp(BaseModel):
     error: str = Field(default="")
 
 
-@router.post("/api/cad/preview", response_model=CADPreviewResp)
+@router.post("/cad/preview", response_model=CADPreviewResp)
 async def preview_cad_model(req: CADPreviewReq):
     data, error = execute_and_preview(req.content)
     if error:

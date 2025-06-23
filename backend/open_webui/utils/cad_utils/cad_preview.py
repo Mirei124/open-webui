@@ -45,10 +45,17 @@ def parse_result_variable(code: str, namespace: dict) -> Showable | None:
 
 
 def execute_and_preview(code: str) -> Tuple[Optional[dict], Optional[str]]:
+    m = re.search(r"```python(.+)```", code, re.M | re.S)
+    if m:
+        code = m.group(1)
+    else:
+        return None, "Failed to extract CADQuery code."
     clean_code, error = CadQueryValidator().validate(code)
     if error:
         return None, error
 
     assert clean_code
-    result = execute_code(clean_code)
+    result, error = execute_code(clean_code)
+    if error:
+        return None, error
     return preview(result)
