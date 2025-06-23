@@ -599,7 +599,7 @@
 
 		let response = await fetch(`${WEBUI_BASE_URL}/api/v1/chats/cad/preview`, {
 			method: 'POST',
-			mode: 'no-cors',
+			mode: 'cors',
 			headers: {
 				'Content-Type': 'application/json'
 			},
